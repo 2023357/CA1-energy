@@ -89,7 +89,6 @@ print(table(encoded$energy_use_level, encoded$energy_use_code))
 write.csv(encoded, file.path(data_dir, "energy_encoded.csv"), row.names = FALSE)
 cat("Saved:", file.path(data_dir, "energy_encoded.csv"), "\n")
 
-
 # =============================================================================
 # PART B - PCA
 # =============================================================================
@@ -269,3 +268,11 @@ p_trend <- ggplot(trend, aes(year, mean_score, colour = PC)) +
 ggsave("figures/03_pca_trend.png", p_trend, width = 8, height = 5, dpi = 150)
 
 cat("\nAll PCA figures saved in figures/\n")
+
+print(p_scree)   # scree plot e variância acumulada
+print(p_load)    # loadings: o que cada componente significa
+print(p_bi)      # países no PC1 x PC2 (2022)
+print(p_trend)   # média dos componentes por ano
+
+
+
