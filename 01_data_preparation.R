@@ -43,3 +43,18 @@ aggregates <- unique(raw$country[raw$iso_code == "" | grepl("^OWID", raw$iso_cod
 cat("Aggregate (non-country) entities found:", length(aggregates), "\n")
 cat("Examples:", paste(head(aggregates, 6), collapse = ", "), "\n")
 
+# ---- 2. Scope: countries only, 2000-2022 -----------------------------------
+# Justification:
+#  * Aggregates double-count countries, so they are removed.
+#  * Before 2000 the electricity-mix variables are very sparse.
+#  * GDP is 100% missing for 2023-2024 in this release, so 2022 is the last
+#    year with all key variables available.
+energy <- raw %>%
+  filter(iso_code != "", !grepl("^OWID", iso_code),
+         year >= 2000, year <= 2022)
+
+cat("\n===== 2. AFTER SCOPING (countries, 2000-2022) =====\n")
+cat("Rows:", nrow(energy), " Countries:", length(unique(energy$country)), "\n")
+
+
+
