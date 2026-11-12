@@ -24,7 +24,18 @@ library(scales)
 
 dir.create("figures", showWarnings = FALSE)
 
-energy <- read.csv("data/energy_clean.csv", stringsAsFactors = FALSE)
+# The clean CSV may be inside a "data" subfolder (GitHub layout) or next to
+# this script (files downloaded separately). Both layouts work.
+clean_file <- if (file.exists(file.path("data", "energy_clean.csv"))) {
+  file.path("data", "energy_clean.csv")
+} else {
+  "energy_clean.csv"
+}
+if (!file.exists(clean_file)) {
+  stop("energy_clean.csv not found. Run 01_data_preparation.R first, ",
+       "or put energy_clean.csv in the working directory: ", getwd())
+}
+energy <- read.csv(clean_file, stringsAsFactors = FALSE)
 
 # Fixed colour for each electricity source, used in every plot so the
 # reader learns the colours once (fossil = warm/grey, clean = cool/green)
@@ -145,7 +156,6 @@ p_q3 <- ggplot(d22, aes(x = gdp_per_capita, y = carbon_intensity_elec)) +
   theme_poster
 ggsave("figures/02_q3_gdp_vs_carbon.png", p_q3, width = 9, height = 6, dpi = 150)
 
-
 # =============================================================================
 # Q4. How does carbon intensity depend on the dominant source?  (COVARIATION)
 # =============================================================================
@@ -244,3 +254,13 @@ p_cor <- ggplot(cor_long, aes(Var1, Var2, fill = r)) +
 ggsave("figures/02_correlation_matrix.png", p_cor, width = 9, height = 7.5, dpi = 150)
 
 cat("\nAll EDA figures saved in figures/\n")
+
+print(p_q1)    # Q1 - distribuição do consumo de energia
+print(p_q2)    # Q2 - matriz elétrica 2000-2022
+print(p_q3)    # Q3 - PIB x carbono
+print(p_q4)    # Q4 - carbono por fonte (boxplot)
+print(p_q4b)   # Q4 - fonte dominante por período
+print(p_q5)    # Q5 - países que mais mudaram
+print(p_cor)   # matriz de correlação
+
+
