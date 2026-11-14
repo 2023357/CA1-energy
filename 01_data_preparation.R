@@ -108,7 +108,17 @@ p_missing <- ggplot(filter(missing_tbl, pct_missing > 0),
   theme_minimal(base_size = 12)
 ggsave("figures/01_missing_values.png", p_missing, width = 8, height = 5, dpi = 150)
 
-# Strategy:
+# Strategy - compared with the methods from the module (Week 2):
+#  * Constant (e.g. 0)      -> unrealistic: a country with GDP = 0 does not exist.
+#  * Mean / median          -> every missing country would get the SAME GDP,
+#                              which shrinks the spread and invents an economy.
+#  * Random / distribution  -> a random GDP has no link to the country's energy
+#                              use, so it would create fake relationships.
+#  * Hot-deck / regression  -> would need a similar country or a model; GDP is
+#                              one of the variables we want to ANALYSE (Q3, PCA),
+#                              so predicting it from energy data would be circular.
+#  * Delete records         -> chosen, but the module warns it is "biased if the
+#                              missingness is systematic" -> checked in step 8a.
 #  (a) GDP (~25% missing): gaps INSIDE a country's series are filled by linear
 #      interpolation between the known years (GDP changes smoothly over time).
 #      Countries with no GDP at all are NOT imputed - inventing a whole series
@@ -149,7 +159,10 @@ cat("Share values outside [0,100]:", invalid_shares, "\n")
 cat("Duplicated country-year rows:", sum(duplicated(energy[, c("country", "year")])), "\n")
 
 # ---- 6. Outliers ------------------------------------------------------------
-# Detection with the IQR rule: value > Q3 + 1.5*IQR or < Q1 - 1.5*IQR.
+# Approach from the module: identify -> investigate -> decide
+# (error -> correct; real extreme -> keep with care; disguised missing -> NA).
+# 6a. IDENTIFY with the IQR rule: value > Q3 + 1.5*IQR or < Q1 - 1.5*IQR.
+# The IQR rule only DETECTS unusual values; it does not decide what to remove.
 iqr_outliers <- function(x) {
   q <- quantile(x, c(.25, .75), na.rm = TRUE)
   sum(x < q[1] - 1.5 * diff(q) | x > q[2] + 1.5 * diff(q), na.rm = TRUE)
@@ -166,18 +179,41 @@ cat("\nHighest energy_per_capita (kWh/person):\n")
 print(energy %>% arrange(desc(energy_per_capita)) %>%
         select(country, year, population, energy_per_capita) %>% head(5))
 
-# Treatment decision (critical point for the poster):
+# 6b. INVESTIGATE and DECIDE (critical point for the poster):
 #  * Most IQR "outliers" are REAL: Qatar, Iceland, Norway really use a lot of
 #    energy; Paraguay/Norway really have ~100% hydro. Removing them would
 #    delete the most interesting cases, so they are KEPT.
-#  * Very small territories (population < 100,000) are STRUCTURAL outliers:
-#    one refinery or power plant dominates the statistics (e.g. the US Virgin
-#    Islands, ~650,000 kWh/person because of the HOVENSA oil refinery). They
-#    are not comparable to national energy systems, so they are REMOVED.
+#  * Very small territories (population < 100,000, e.g. Faroe Islands,
+#    Greenland, Bermuda) are not comparable to national energy systems: one
+#    plant can dominate their statistics, so they are REMOVED (26 entities).
+#  * The most extreme value, the US Virgin Islands (651,837 kWh/person in 2006,
+#    driven by a large oil refinery), has ~100,000 people, so this filter does
+#    NOT remove it. It leaves the data in step 8 because it has no GDP at all.
 #  * Skewed variables (population, GDP, energy use) will be log-transformed
 #    for plots and PCA instead of being trimmed.
+#  * Note: the population filter is a SCOPE decision (which units are
+#    comparable national systems), taken AFTER investigating the IQR outliers.
+#    It is not the IQR rule itself: most IQR outliers stay in the data.
 before_out <- energy                                 # copy for the plot
 energy <- energy %>% filter(population >= 1e5)
+
+# 6c. Analyse WITH and WITHOUT the removed territories (Week 4 good practice):
+iqr_flags <- function(x) {
+  q <- quantile(x, c(.25, .75), na.rm = TRUE)
+  x < q[1] - 1.5 * diff(q) | x > q[2] + 1.5 * diff(q)
+}
+cat("\n===== 6c. energy_per_capita WITH vs WITHOUT tiny territories =====\n")
+print(data.frame(
+  data   = c("with (all territories)", "without (population >= 100k)"),
+  rows   = c(sum(!is.na(before_out$energy_per_capita)), sum(!is.na(energy$energy_per_capita))),
+  mean   = round(c(mean(before_out$energy_per_capita, na.rm = TRUE),
+                   mean(energy$energy_per_capita, na.rm = TRUE))),
+  median = round(c(median(before_out$energy_per_capita, na.rm = TRUE),
+                   median(energy$energy_per_capita, na.rm = TRUE))),
+  iqr_outliers = c(sum(iqr_flags(before_out$energy_per_capita), na.rm = TRUE),
+                   sum(iqr_flags(energy$energy_per_capita), na.rm = TRUE))))
+# FINDING: the median drops (12,913 -> 11,084 kWh) but the mean hardly moves:
+# the tiny territories mostly inflated the middle of the distribution.
 
 # ---- 7. Feature engineering -------------------------------------------------
 energy <- energy %>%
@@ -197,6 +233,30 @@ energy <- energy %>%
   select(-gdp, -greenhouse_gas_emissions)          # replaced by per-capita versions
 
 # ---- 8. Final complete-case filter -----------------------------------------
+# 8a. Is the deletion biased? Compare, in 2022, the countries that will be
+#     LOST because they have no GDP at all with the countries that are KEPT.
+#     If they differ, the missingness is systematic (not random) and the clean
+#     data is not fully representative -> a limitation to report.
+no_gdp_countries <- energy %>%
+  group_by(country) %>%
+  summarise(no_gdp = all(is.na(gdp_per_capita)), .groups = "drop")
+bias_tbl <- energy %>%
+  filter(year == 2022) %>%
+  left_join(no_gdp_countries, by = "country") %>%
+  mutate(group = ifelse(no_gdp, "Lost (no GDP)", "Kept")) %>%
+  group_by(group) %>%
+  summarise(countries          = n(),
+            median_pop_million = round(median(population) / 1e6, 1),
+            median_energy_pc   = round(median(energy_per_capita, na.rm = TRUE)),
+            median_carbon_g    = round(median(carbon_intensity_elec, na.rm = TRUE)),
+            median_renew_pct   = round(median(renewables_share_elec, na.rm = TRUE), 1),
+            .groups = "drop")
+cat("\n===== 8a. BIAS CHECK: countries kept vs lost for missing GDP (2022) =====\n")
+print(as.data.frame(bias_tbl))
+# FINDING: the lost countries are much smaller, use less energy and have
+# slightly dirtier, less renewable electricity. The deletion is therefore
+# systematic: results describe larger countries with complete statistics.
+
 n_before <- nrow(energy)
 energy <- energy %>% filter(complete.cases(.))
 cat("\n===== 8. COMPLETE CASES =====\n")
@@ -214,17 +274,17 @@ energy <- energy %>%
 
 # ---- 9. Outlier plot: before vs after ---------------------------------------
 cmp <- bind_rows(
-  before_out %>% transmute(stage = "Before (all territories)", energy_per_capita),
-  energy     %>% transmute(stage = "After (population >= 100k)", energy_per_capita)) %>%
-  mutate(stage = factor(stage, levels = c("Before (all territories)",
-                                          "After (population >= 100k)"))) %>%
+  before_out %>% transmute(stage = "Before treatment", energy_per_capita),
+  energy     %>% transmute(stage = "After cleaning (final data)", energy_per_capita)) %>%
+  mutate(stage = factor(stage, levels = c("Before treatment",
+                                          "After cleaning (final data)"))) %>%
   filter(energy_per_capita > 0)   # log scale cannot show 0 / NA values
 # Label the most extreme entity in each panel so the reader sees WHO it is
 extremes <- bind_rows(
   before_out %>% slice_max(energy_per_capita, n = 1) %>%
-    mutate(stage = "Before (all territories)"),
+    mutate(stage = "Before treatment"),
   energy %>% slice_max(energy_per_capita, n = 1) %>%
-    mutate(stage = "After (population >= 100k)")) %>%
+    mutate(stage = "After cleaning (final data)")) %>%
   mutate(stage = factor(stage, levels = levels(cmp$stage)),
          label = paste0(country, " ", year, "\n",
                         scales::comma(round(energy_per_capita)), " kWh"))
@@ -233,8 +293,8 @@ p_out <- ggplot(cmp, aes(x = stage, y = energy_per_capita)) +
   geom_boxplot(fill = "#a9d6e5", outlier.colour = "#c1121f", outlier.alpha = .4) +
   geom_text(data = extremes, aes(label = label), hjust = -0.15, size = 3.3) +
   scale_y_continuous(labels = scales::comma) +
-  labs(title = "Energy use per person: effect of removing tiny territories",
-       subtitle = "Red points = IQR outliers. Remaining outliers (Qatar, Iceland...) are real and kept.",
+  labs(title = "Energy use per person before and after cleaning",
+       subtitle = "Red = IQR outliers. US Virgin Islands left (no GDP); Qatar, Iceland... are real and kept.",
        x = NULL, y = "kWh per person") +
   theme_minimal(base_size = 12)
 ggsave("figures/01_outliers_before_after.png", p_out, width = 8, height = 5, dpi = 150)

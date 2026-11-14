@@ -189,9 +189,16 @@ for (k in 1:3) {
 #      against hydro and nuclear (-).
 #  PC3 (~12%) "Large coal systems vs new renewables": population and coal (+)
 #      against wind, solar and oil (-).
-# Because components are uncorrelated, PC1 (wealth) and PC2 (cleanliness)
-# are SEPARATE dimensions - this confirms EDA Q3 (r = 0.14 between wealth and
-# carbon intensity).
+# Link to EDA Q3 - read from the LOADINGS, not from the fact that components
+# are uncorrelated (PCA always builds uncorrelated components, so that alone
+# proves nothing about the original variables):
+#  - log GDP per person loads mainly on PC1 and only weakly on PC2;
+#  - carbon intensity loads mainly on PC2 and only weakly on PC1.
+# Wealth and carbon intensity therefore sit mostly on DIFFERENT components,
+# which is CONSISTENT with the weak correlation found in the EDA. It is a
+# description of the data structure, not a statistical test of independence.
+cat("\n===== B5b. Where do wealth and carbon intensity load? =====\n")
+print(round(pca$rotation[c("log_gdp_pc", "carbon_intensity_elec"), 1:2], 2))
 
 load_long <- loadings %>%
   mutate(variable = rownames(loadings)) %>%
@@ -248,7 +255,18 @@ print(round(cor(encoded[, dummy_names], pca$x[, 1:3]), 2))
 cat("\n===== B7b. Correlation of period_code with PCs =====\n")
 print(round(cor(encoded$period_code, pca$x[, 1:3]), 2))
 
-trend <- scores %>%
+# (c) Average score per year. The number of countries changes from year to
+#     year (143-158), so a plain yearly mean could move just because countries
+#     enter or leave the data. Only the countries present in ALL 23 years are
+#     used (the same "balanced panel" idea as EDA Q2).
+balanced_scores <- scores %>%
+  group_by(country) %>%
+  filter(n() == 23) %>%
+  ungroup()
+cat("\nCountries used for the yearly trend (present in all years):",
+    n_distinct(balanced_scores$country), "\n")
+
+trend <- balanced_scores %>%
   group_by(year) %>%
   summarise(across(PC1:PC3, mean)) %>%
   pivot_longer(-year, names_to = "PC", values_to = "mean_score") %>%
@@ -261,8 +279,9 @@ p_trend <- ggplot(trend, aes(year, mean_score, colour = PC)) +
   geom_hline(yintercept = 0, colour = "grey70") +
   geom_line(linewidth = 1.2) +
   scale_colour_manual(values = c("#1f77b4", "#c1121f", "#2ca02c")) +
-  labs(title = "Average component score per year",
-       subtitle = "PC1 rises (countries develop). PC2 and PC3 fall after ~2012:\nelectricity becomes cleaner and shifts towards wind/solar.",
+  labs(title = paste0("Average component score per year (",
+                      n_distinct(balanced_scores$country), " countries)"),
+       subtitle = "PC1 rises (countries develop). PC2 falls (cleaner electricity);\nPC3 falls after ~2010 as wind and solar grow.",
        x = NULL, y = "Mean score (0 = average country-year)", colour = NULL) +
   theme_poster + guides(colour = guide_legend(nrow = 2))
 ggsave("figures/03_pca_trend.png", p_trend, width = 8, height = 5, dpi = 150)

@@ -60,8 +60,20 @@ q1_stats <- energy %>%
             sd     = sd(energy_per_capita),
             min    = min(energy_per_capita),
             max    = max(energy_per_capita))
-cat("\n===== Q1. energy_per_capita (kWh/person) =====\n")
+cat("\n===== Q1. energy_per_capita (kWh/person), ALL country-years 2000-2022 =====\n")
 print(round(q1_stats))
+
+# The histogram below shows ONLY 2022 (one value per country), so the
+# statistics for that same sample are computed too - the numbers quoted with
+# the plot must come from the data that is plotted.
+e22 <- energy %>% filter(year == 2022) %>% arrange(energy_per_capita)
+q1_stats_2022 <- e22 %>%
+  summarise(countries = n(),
+            mean   = mean(energy_per_capita),
+            median = median(energy_per_capita),
+            max_to_min_ratio = max(energy_per_capita) / min(energy_per_capita))
+cat("\n===== Q1. energy_per_capita (kWh/person), 2022 only =====\n")
+print(round(q1_stats_2022))
 
 # Histogram on the original scale vs log scale.
 # The original scale is dominated by a long right tail; on the log scale
@@ -74,14 +86,14 @@ p_q1 <- energy %>%
              linetype = "dashed", colour = "#c1121f") +
   scale_x_log10(labels = comma) +
   labs(title = "Q1. Energy use per person, 2022 (158 countries)",
-       subtitle = "Log scale. Dashed red line = median. Qatar uses ~700x more than Burundi.",
+       subtitle = paste0("Log scale. Dashed red line = median. Highest user = ",
+                         round(q1_stats_2022$max_to_min_ratio), "x the lowest."),
        x = "Primary energy per person (kWh, log scale)", y = "Number of countries") +
   theme_poster
 ggsave("figures/02_q1_energy_distribution.png", p_q1, width = 8, height = 5, dpi = 150)
 
 # Extremes in 2022 (unusual values)
 cat("\nLowest and highest energy use per person in 2022:\n")
-e22 <- energy %>% filter(year == 2022) %>% arrange(energy_per_capita)
 print(bind_rows(head(e22, 3), tail(e22, 3)) %>%
         select(country, energy_per_capita, gdp_per_capita))
 
@@ -123,12 +135,20 @@ ggsave("figures/02_q2_mix_over_time.png", p_q2, width = 8, height = 5, dpi = 150
 # =============================================================================
 # Q3. Do richer countries have cleaner electricity?  (COVARIATION)
 # =============================================================================
-# Pearson correlation, using log(GDP per capita) because GDP is very skewed
+# Pearson correlation, using log(GDP per capita) because GDP is very skewed.
+# Two samples are reported, and they must not be mixed:
+#  - 2022 only: one value per country -> this is the sample shown in the plot.
+#  - 2000-2022: all country-years. Each country appears up to 23 times, so
+#    the rows are not independent; this r describes the whole period only.
+d22 <- energy %>% filter(year == 2022)
+r_carbon_2022 <- cor(log(d22$gdp_per_capita), d22$carbon_intensity_elec)
+r_carbon_all  <- cor(log(energy$gdp_per_capita), energy$carbon_intensity_elec)
+r_renew_2022  <- cor(log(d22$gdp_per_capita), d22$renewables_share_elec)
+r_renew_all   <- cor(log(energy$gdp_per_capita), energy$renewables_share_elec)
 cat("\n===== Q3. Correlations with log(GDP per capita) =====\n")
-cat("carbon_intensity_elec :", round(cor(log(energy$gdp_per_capita),
-                                          energy$carbon_intensity_elec), 2), "\n")
-cat("renewables_share_elec :", round(cor(log(energy$gdp_per_capita),
-                                          energy$renewables_share_elec), 2), "\n")
+print(data.frame(variable = c("carbon_intensity_elec", "renewables_share_elec"),
+                 r_2022 = round(c(r_carbon_2022, r_renew_2022), 2),
+                 r_2000_2022 = round(c(r_carbon_all, r_renew_all), 2)))
 
 # Countries to label: the "unusual" ones that break the expected pattern
 #  - rich but carbon-heavy (Qatar, Australia, Taiwan)
@@ -140,9 +160,11 @@ cat("renewables_share_elec :", round(cor(log(energy$gdp_per_capita),
 label_q3 <- c("Qatar", "Australia", "Taiwan", "Norway", "France", "Ethiopia",
               "Paraguay", "India", "Ireland", "Turkmenistan", "Uzbekistan")
 
-d22 <- energy %>% filter(year == 2022)
 p_q3 <- ggplot(d22, aes(x = gdp_per_capita, y = carbon_intensity_elec)) +
   geom_point(aes(colour = dominant_source), size = 2.6, alpha = .8) +
+  # Because scale_x_log10() transforms the x axis BEFORE the statistics are
+  # computed, this straight line is the fit of carbon intensity on log10(GDP),
+  # i.e. the same log relationship measured by the correlation above.
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
               colour = "black", linetype = "dashed", linewidth = .6) +
   geom_text(data = filter(d22, country %in% label_q3), aes(label = country),
@@ -150,7 +172,8 @@ p_q3 <- ggplot(d22, aes(x = gdp_per_capita, y = carbon_intensity_elec)) +
   scale_x_log10(labels = dollar) +
   scale_colour_manual(values = source_cols) +
   labs(title = "Q3. Wealth vs carbon intensity of electricity, 2022",
-       subtitle = "Almost no relationship (r = 0.14). The dominant source matters more than wealth.",
+       subtitle = sprintf("Weak relationship: r = %.2f in 2022 (r = %.2f over 2000-2022).\nDashed line = linear fit on log(GDP). The dominant source matters more than wealth.",
+                          r_carbon_2022, r_carbon_all),
        x = "GDP per person (log scale)", y = "gCO2 per kWh of electricity",
        colour = "Dominant source") +
   theme_poster
