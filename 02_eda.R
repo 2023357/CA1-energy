@@ -126,7 +126,7 @@ p_q2 <- ggplot(mix_year, aes(x = year, y = share, colour = source)) +
   scale_colour_manual(values = c(source_cols, `Wind + Solar` = "#2ca02c")) +
   scale_x_continuous(limits = c(2000, 2026), breaks = seq(2000, 2020, 5)) +
   labs(title = "Q2. Average electricity mix, 2000-2022 (142 countries)",
-       subtitle = "Wind + solar: ~0% to ~9%, mostly after 2010. Oil is being replaced by gas.",
+       subtitle = "Unweighted country average. Wind + solar: ~0% to ~9%, mostly after 2010.\nThe oil share fell while the gas share rose.",
        x = NULL, y = "Average share of electricity (%)") +
   theme_poster + theme(legend.position = "none")
 ggsave("figures/02_q2_mix_over_time.png", p_q2, width = 8, height = 5, dpi = 150)
@@ -172,7 +172,7 @@ p_q3 <- ggplot(d22, aes(x = gdp_per_capita, y = carbon_intensity_elec)) +
   scale_x_log10(labels = dollar) +
   scale_colour_manual(values = source_cols) +
   labs(title = "Q3. Wealth vs carbon intensity of electricity, 2022",
-       subtitle = sprintf("Weak relationship: r = %.2f in 2022 (r = %.2f over 2000-2022).\nDashed line = linear fit on log(GDP). The dominant source matters more than wealth.",
+       subtitle = sprintf("Weak relationship: r = %.2f in 2022 (r = %.2f over 2000-2022).\nDashed line = linear fit on log(GDP). Points group more by dominant source than by wealth.",
                           r_carbon_2022, r_carbon_all),
        x = "GDP per person (log scale)", y = "gCO2 per kWh of electricity",
        colour = "Dominant source") +
@@ -193,7 +193,7 @@ p_q4 <- ggplot(energy, aes(x = reorder(dominant_source, carbon_intensity_elec, m
   geom_boxplot(outlier.alpha = .3, show.legend = FALSE) +
   scale_fill_manual(values = source_cols) +
   labs(title = "Q4. Carbon intensity by dominant source (all years)",
-       subtitle = "Ordered by median. Hydro-led systems emit ~4.5x less than coal-led ones (148 vs 666 g).",
+       subtitle = "Ordered by median: 148 g (hydro-led) vs 666 g (coal-led).",
        x = "Dominant source of electricity", y = "gCO2 per kWh") +
   theme_poster
 ggsave("figures/02_q4_carbon_by_source.png", p_q4, width = 8, height = 5, dpi = 150)
@@ -228,6 +228,17 @@ cat("\n===== Q5. Change in renewables share 2000 -> 2022 =====\n")
 cat("Countries that increased:", sum(change$change > 0),
     " decreased:", sum(change$change < 0), "\n")
 
+# Which kind of system lost renewable share? Use the dominant source in 2000.
+# (Checked instead of assumed: hydro-based is the majority of the decreases.
+#  Africa is NOT the majority of all 41 - it only dominates the largest drops.)
+dom2000 <- energy %>% filter(year == 2000) %>% select(country, dominant_2000 = dominant_source)
+decreased <- change %>% filter(change < 0) %>% left_join(dom2000, by = "country")
+n_dec       <- nrow(decreased)
+n_dec_hydro <- sum(decreased$dominant_2000 == "Hydro", na.rm = TRUE)
+cat("Of the", n_dec, "countries that decreased,", n_dec_hydro,
+    "had hydro as dominant source in 2000\n")
+print(table(decreased$dominant_2000))
+
 top_bottom <- bind_rows(slice_max(change, change, n = 8),
                         slice_min(change, change, n = 8)) %>%
   mutate(direction = ifelse(change > 0, "Increase", "Decrease"))
@@ -239,7 +250,7 @@ p_q5 <- ggplot(top_bottom, aes(x = reorder(country, change), y = change, fill = 
   coord_flip() +
   scale_fill_manual(values = c(Increase = "#2ca02c", Decrease = "#c1121f")) +
   labs(title = "Q5. Largest changes in renewable share, 2000-2022",
-       subtitle = "Unusual: 41 countries became LESS renewable, mostly hydro-based African\nsystems where fossil generation grew faster than hydro as demand rose.",
+       subtitle = sprintf("Unusual: %d countries became LESS renewable;\n%d of them were hydro-based in 2000. Most large drops are in Africa.", n_dec, n_dec_hydro),
        x = NULL, y = "Change in renewables share (percentage points)", fill = NULL) +
   theme_poster
 ggsave("figures/02_q5_renewables_change.png", p_q5, width = 8, height = 6, dpi = 150)
