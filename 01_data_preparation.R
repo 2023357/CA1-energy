@@ -2,7 +2,7 @@
 # CA1 - Data Exploration & Preparation
 # Script 01: Data understanding, characterisation and preparation
 # Domain: ENERGY
-#
+#git 
 # Research problem:
 #   "How did countries move away from fossil fuels between 2000 and 2022, and how was this related to income and energy use?"
 
