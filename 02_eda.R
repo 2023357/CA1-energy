@@ -226,7 +226,9 @@ change <- energy %>%
 
 cat("\n===== Q5. Change in renewables share 2000 -> 2022 =====\n")
 cat("Countries that increased:", sum(change$change > 0),
-    " decreased:", sum(change$change < 0), "\n")
+    " decreased:", sum(change$change < 0),
+    " no change:", sum(change$change == 0),
+    " total:", nrow(change), "\n")
 
 # Which kind of system lost renewable share? Use the dominant source in 2000.
 # (Checked instead of assumed: hydro-based is the majority of the decreases.

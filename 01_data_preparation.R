@@ -4,9 +4,8 @@
 # Domain: ENERGY
 #
 # Research problem:
-#   "What characterises the transition of national electricity systems away
-#    from fossil fuels (2000-2022), and how is it related to wealth and
-#    energy use?"
+#   "How did countries move away from fossil fuels between 2000 and 2022, and how was this related to income and energy use?"
+
 #
 # Dataset: Our World in Data (OWID) - Energy dataset
 #   Source: https://github.com/owid/energy-data (owid-energy-data.csv)
@@ -185,7 +184,7 @@ print(energy %>% arrange(desc(energy_per_capita)) %>%
 #    delete the most interesting cases, so they are KEPT.
 #  * Very small territories (population < 100,000, e.g. Faroe Islands,
 #    Greenland, Bermuda) are not comparable to national energy systems: one
-#    plant can dominate their statistics, so they are REMOVED (26 entities).
+#    plant can dominate their statistics, so they are REMOVED (counts printed below).
 #  * The most extreme value, the US Virgin Islands (651,837 kWh/person in 2006,
 #    driven by a large oil refinery), has ~100,000 people, so this filter does
 #    NOT remove it. It leaves the data in step 8 because it has no GDP at all.
@@ -196,6 +195,9 @@ print(energy %>% arrange(desc(energy_per_capita)) %>%
 #    It is not the IQR rule itself: most IQR outliers stay in the data.
 before_out <- energy                                 # copy for the plot
 energy <- energy %>% filter(population >= 1e5)
+cat("Population filter - rows removed:", nrow(before_out) - nrow(energy),
+    "| territories removed completely:",
+    n_distinct(before_out$country) - n_distinct(energy$country), "\n")
 
 # 6c. Analyse WITH and WITHOUT the removed territories (Week 4 good practice):
 iqr_flags <- function(x) {
