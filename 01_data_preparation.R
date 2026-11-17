@@ -45,7 +45,7 @@ cat("Rows:", nrow(raw), " Columns:", ncol(raw), "\n")
 cat("Years covered:", min(raw$year), "-", max(raw$year), "\n")
 cat("Distinct entities:", length(unique(raw$country)), "\n")
 
-# The raw file mixes real countries with aggregates (e.g. "World", "Europe",
+# The raw file mixes real countries with aggregates ( "World", "Europe",
 # "High-income countries"). Aggregates have no ISO code or an "OWID_" code.
 aggregates <- unique(raw$country[raw$iso_code == "" | grepl("^OWID", raw$iso_code)])
 cat("Aggregate (non-country) entities found:", length(aggregates), "\n")
